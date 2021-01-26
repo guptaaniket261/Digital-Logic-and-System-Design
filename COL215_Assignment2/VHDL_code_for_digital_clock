@@ -1,0 +1,595 @@
+LIBRARY ieee;
+USE ieee.std_logic_1164.all;
+use IEEE.NUMERIC_STD.ALL;
+
+----------------------------------------------------------------
+
+
+ENTITY clk250Hz IS
+	PORT(clk:IN STD_LOGIC;
+		resetn:IN STD_LOGIC;
+		clk_out:OUT STD_LOGIC);
+END clk250Hz;
+
+
+ARCHITECTURE clk250Hz1 of clk250Hz IS
+-----------10Mhz to 250Hz-----
+	SIGNAL t: STD_LOGIC;
+	SIGNAL count: UNSIGNED(20 DOWNTO 0);
+BEGIN
+	PROCESS(resetn, clk)
+		BEGIN
+			IF resetn='1' THEN t<='0'; count<="000000000000000000000";
+			ELSIF clk'EVENT AND clk='1' THEN
+				IF count=19999 THEN count<="000000000000000000000";t<=NOT(t);
+				ELSE count<=count+1;
+				END IF;
+			END IF;
+	END PROCESS;
+	clk_out<=t;
+END clk250Hz1;
+
+
+----------------------------------------------------------------------
+LIBRARY ieee;
+USE ieee.std_logic_1164.all;
+use IEEE.NUMERIC_STD.ALL;
+
+ENTITY manual IS
+	PORT (Clk, Resetn, w : IN STD_LOGIC ;
+		z : OUT STD_LOGIC) ;
+END manual ;
+
+
+ARCHITECTURE manual1 OF manual IS
+	SIGNAL temp: STD_LOGIC;
+	SIGNAL temp1: STD_LOGIC;
+BEGIN
+	PROCESS ( Resetn, w )
+		BEGIN
+			IF Resetn='1' THEN temp<='0';
+			ELSIF (w'EVENT AND w='1') THEN
+				temp<=NOT(temp);
+			END IF;
+	END PROCESS;
+
+	PROCESS ( Resetn, Clk )
+		BEGIN
+			IF Resetn='1' THEN temp1<='0';
+			ELSIF (Clk'EVENT AND Clk='1') THEN
+				temp1<=temp;
+			END IF;
+	END PROCESS ;
+	z<=temp1;
+END manual1 ;
+
+------------------------------------------------------------------
+LIBRARY ieee;
+USE ieee.std_logic_1164.all;
+use IEEE.NUMERIC_STD.ALL;
+
+ENTITY setting IS
+	PORT(Clk, Resetn, w, s: IN STD_LOGIC;
+		z: OUT UNSIGNED(2 DOWNTO 0));
+END setting;
+
+ARCHITECTURE setting1 OF setting IS
+	TYPE state_type IS(Idle, h0, h1, m0, m1, s0, s1);
+	SIGNAL state,state1 : state_type;
+BEGIN
+	PROCESS ( Resetn, w, s)
+		BEGIN
+			IF Resetn='1' THEN state<=Idle;
+			ELSIF s='0' THEN state<=Idle;
+			ELSIF (w'EVENT AND w='1') THEN
+				CASE state IS
+					WHEN Idle=>
+						IF s='0' THEN state<=Idle;
+						ELSE state<=h1;
+						END IF;
+					WHEN h1=>
+						IF s='0' THEN state<=Idle;
+						ELSIF (s='1') THEN state<=h0;
+						ELSE state<=h1;
+						END IF;
+					WHEN h0=>
+						IF s='0' THEN state<=Idle;
+						ELSIF (s='1') THEN state<=m1;
+						ELSE state<=h0;
+						END IF;
+					WHEN m1=>
+						IF s='0' THEN state<=Idle;
+						ELSIF (s='1') THEN state<=m0;
+						ELSE state<=m1;
+						END IF;
+					WHEN m0=>
+						IF s='0' THEN state<=Idle;
+						ELSIF (s='1') THEN state<=s1;
+						ELSE state<=m0;
+						END IF;
+					WHEN s1=>
+						IF s='0' THEN state<=Idle;
+						ELSIF (s='1') THEN state<=s0;
+						ELSE state<=s1;
+						END IF;
+					WHEN s0=>
+						IF s='0' THEN state<=Idle;
+						ELSIF (s='1') THEN state<=h1;
+						ELSE state<=s0;
+						END IF;
+				END CASE;
+			END IF;
+	END PROCESS;
+
+
+
+	PROCESS ( Resetn, Clk )
+		BEGIN
+			IF Resetn='1' THEN state1<=Idle;
+			ELSIF (Clk'EVENT AND Clk='1') THEN
+				state1<=state;
+			END IF;
+	END PROCESS ;
+
+	WITH state1 SELECT
+	z<="000" WHEN IDLE,
+		"001" WHEN h1,
+		"010" WHEN h0,
+		"011" WHEN m1,
+		"100" WHEN m0,
+		"101" WHEN s1,
+		"110" WHEN s0;
+END setting1;
+
+-----------------------------------------------------------------------
+LIBRARY ieee;
+USE ieee.std_logic_1164.all;
+use IEEE.NUMERIC_STD.ALL;
+
+
+
+
+ENTITY incrementer IS
+	PORT(Clk, Resetn, w: IN STD_LOGIC;
+		mode: IN UNSIGNED(2 DOWNTO 0);
+		h0,h1,m0,m1,s0,s1: OUT UNSIGNED(3 DOWNTO 0));
+END incrementer;
+
+
+ARCHITECTURE incrementer1 OF incrementer IS
+	TYPE state_type IS(Idle, s1, s2, s3, s4);
+	SIGNAL state : state_type;
+	SIGNAL curr_mode: UNSIGNED(2 DOWNTO 0);
+	SIGNAL th0,th1,tm0,tm1,ts0,ts1: UNSIGNED(3 DOWNTO 0);
+	SIGNAL t:STD_LOGIC;
+	SIGNAL count:UNSIGNED(5 DOWNTO 0);
+BEGIN
+	PROCESS ( Resetn, clk)
+		BEGIN
+			IF Resetn='1' THEN state<=Idle;curr_mode<="000";t<='0';count<="000000";
+			ELSIF (clk'EVENT AND clk='1') THEN
+				IF(count=49) THEN   ----------since the master clock is of 250Hz and this component requires 5Hz
+					count<="000000";
+					t<=NOT(t);
+					IF (mode/=curr_mode OR mode="000") THEN state<=Idle; curr_mode<=mode;
+					ELSE
+						CASE state IS
+							WHEN Idle=>
+								IF w='0' THEN state<= Idle;
+								ELSE state<=s1;
+								END IF;
+							WHEN s1=>
+								IF w='0' THEN state<= Idle;
+								ELSE state<=s2;
+								END IF;
+							WHEN s2=>
+								IF w='0' THEN state<= Idle;
+								ELSE state<=s3;
+								END IF;
+							WHEN s3=>
+								IF w='0' THEN state<= Idle;
+								ELSE state<=s4;
+								END IF;
+							WHEN s4=>
+								IF w='0' THEN state<= Idle;
+								ELSE state<=s4;
+								END IF;
+						END CASE;
+					END IF;
+				ELSE count<=count+1;
+				END IF;
+			END IF;
+	END PROCESS;
+
+
+
+	PROCESS ( Resetn, state,t)
+		BEGIN
+			IF Resetn='1' THEN th0<="0000";th1<="0000";tm0<="0000";tm1<="0000";ts0<="0000";ts1<="0000";
+			ELSIF (state=s1 OR state=s4) THEN
+				IF curr_mode="001" THEN
+					IF th0>"0011" THEN
+						IF th1="0001" THEN th1<="0000";
+						ELSE th1<="0001";
+						END IF;
+					ELSE
+						IF th1="0010" THEN th1<="0000";
+						ELSE th1<=th1+1;
+						END IF;
+					END IF;
+				ELSIF curr_mode="010" THEN
+					IF th1="0010" THEN
+						IF th0="0011" THEN th0<="0000";
+						ELSE th0<=th0+1;
+						END IF;
+					ELSE
+						IF th0="1001" THEN th0<="0000";
+						ELSE th0<=th0+1;
+						END IF;
+					END IF;
+				ELSIF curr_mode="011" THEN
+					IF tm1="0101" THEN tm1<="0000";
+					ELSE tm1<=tm1+1;
+					END IF;
+				ELSIF curr_mode="100" THEN
+					IF tm0="1001" THEN tm0<="0000";
+					ELSE tm0<=tm0+1;
+					END IF;
+				ELSIF curr_mode="101" THEN
+					IF ts1="0101" THEN ts1<="0000";
+					ELSE ts1<=ts1+1;
+					END IF;
+				ELSIF curr_mode="110" THEN
+					IF ts0="0101" THEN ts0<="0000";
+					ELSE ts0<=ts0+1;
+					END IF;
+				END IF;
+			END IF;
+	END PROCESS ;
+
+	h0<=th0;
+	h1<=th1;
+	m0<=tm0;
+	m1<=tm1;
+	s0<=ts0;
+	s1<=ts1;
+	
+END incrementer1;
+
+------------------------------------------------------------------------------
+LIBRARY ieee;
+USE ieee.std_logic_1164.all;
+use IEEE.NUMERIC_STD.ALL;
+
+ENTITY clock IS
+	PORT (Clk, Resetn, set : IN STD_LOGIC ;
+		H0_in, H1_in, M0_in, M1_in, S0_in, S1_in : IN UNSIGNED(3 DOWNTO 0) ;
+		H0_out, H1_out, M0_out, M1_out, S0_out, S1_out : OUT UNSIGNED(3 DOWNTO 0)) ;
+END clock ;
+
+
+ARCHITECTURE clock1 OF clock IS
+	SIGNAL th0,th1,tm0,tm1,ts0,ts1: UNSIGNED(3 DOWNTO 0);
+	SIGNAL count: UNSIGNED(10 DOWNTO 0);
+BEGIN
+	PROCESS ( Resetn, Clk )
+		BEGIN
+			IF Resetn='1' THEN th0<="0000";th1<="0000";tm0<="0000";tm1<="0000";ts0<="0000";ts1<="0000";count<="00000000000";
+			ELSIF (Clk'EVENT AND Clk='1') THEN
+				IF (set ='1') THEN th0<=H0_in; th1<=H1_in; tm0<=M0_in; tm1<=M1_in; ts0<=S0_in; ts1<=S1_in;
+				ELSE
+					IF count=249 THEN
+						count<="00000000000";
+						IF (ts0<"1001") THEN ts0<=ts0+1;
+						ELSE
+							ts0<="0000";
+							IF (ts1<"0101") THEN ts1<=ts1+1;
+							ELSE
+								ts1<="0000";
+								IF (tm0<"1001") THEN tm0<=tm0+1;
+								ELSE
+									tm0<="0000";
+									IF (tm1<"0101") THEN tm1<=tm1+1;
+									ELSE
+										tm1<="0000";
+										IF (th0="0011" AND th1="0010") THEN th0<="0000"; th1<="0000";
+										ELSIF (th0<"1001") THEN th0<=th0+1;
+										ELSE
+											th0<="0000";
+											th1<=th1+1;
+										END IF;
+									END IF;
+								END IF;
+							END IF;
+						END IF;
+					ELSE count<=count+1;
+					END IF;
+				END IF;
+			END IF;
+	END PROCESS;
+
+	H0_out<=th0;
+	H1_out<=th1;
+	M0_out<=tm0;
+	M1_out<=tm1;
+	S0_out<=ts0;
+	S1_out<=ts1;
+	
+END clock1 ;
+
+-----------------------------------------------------------------------------
+LIBRARY ieee;
+USE ieee.std_logic_1164.all;
+use IEEE.NUMERIC_STD.ALL;
+
+ENTITY mode IS
+	PORT (Clk, Resetn, w : IN STD_LOGIC ;
+		H0, H1, M0, M1, S0, S1 : IN UNSIGNED(3 DOWNTO 0);
+		x1,x0,y1,y0 : OUT UNSIGNED(3 DOWNTO 0);
+		blink: OUT STD_LOGIC) ;
+END mode ;
+
+
+
+ARCHITECTURE mode1 OF mode IS
+	SIGNAL temp: STD_LOGIC;
+	SIGNAL temp1: STD_LOGIC;
+BEGIN
+	PROCESS(w,Resetn)
+		BEGIN
+			IF Resetn='1' THEN temp<='0';
+			ELSIF w'EVENT AND w='1' THEN
+				temp<=NOT(temp);
+			END IF;
+	END PROCESS;
+	PROCESS(Clk,Resetn)
+		BEGIN
+			IF Resetn='1' THEN temp1<='0';
+			ELSIF Clk'EVENT AND Clk='1' THEN temp1<=temp;
+			END IF;
+	END PROCESS;
+	blink<=NOT(temp1);
+	WITH temp1 SELECT
+		x1<=H1 WHEN '0',
+			M1 WHEN OTHERS;
+	WITH temp1 SELECT
+		x0<=H0 WHEN '0',
+			M0 WHEN OTHERS;
+	WITH temp1 SELECT
+		y1<=M1 WHEN '0',
+			S1 WHEN OTHERS;
+	WITH temp1 SELECT
+		y0<=M0 WHEN '0',
+			S0 WHEN OTHERS;
+
+END mode1 ;
+
+
+
+---------------------------------------------------------------------
+LIBRARY ieee;
+USE ieee.std_logic_1164.all;
+use IEEE.NUMERIC_STD.ALL;
+
+ENTITY multiplexer IS
+	PORT(x1,x0,y1,y0: IN UNSIGNED(3 DOWNTO 0);
+		s: IN UNSIGNED(2 DOWNTO 0);
+		X: OUT UNSIGNED(3 DOWNTO 0));
+END multiplexer;
+
+ARCHITECTURE multiplexer1 OF multiplexer IS
+BEGIN
+	WITH s SELECT
+		X<="0000" WHEN "000",
+			x1 WHEN "001",
+			x0 WHEN "010",
+			y1 WHEN "011",
+			y0 WHEN OTHERS;
+
+END multiplexer1 ;
+
+---------------------------------------------------------------------
+LIBRARY ieee;
+USE ieee.std_logic_1164.all;
+use IEEE.NUMERIC_STD.ALL;
+
+ENTITY seg_decoder IS
+	PORT(x: IN UNSIGNED(3 DOWNTO 0);
+		y: OUT UNSIGNED(6 DOWNTO 0));
+END seg_decoder;
+
+
+ARCHITECTURE seg_decoder1 OF seg_decoder IS
+BEGIN
+	WITH x SELECT
+		y<="0000001" WHEN "0000",
+			"1001111" WHEN "0001",
+			"0010010" WHEN "0010",
+			"0000110" WHEN "0011",
+			"1001100" WHEN "0100",
+			"0100100" WHEN "0101",
+			"0100000" WHEN "0110",
+			"0001111" WHEN "0111",
+			"0000000" WHEN "1000",
+			"0000100" WHEN OTHERS;
+
+END seg_decoder1 ;
+
+
+
+-----------------------------------------------------------------------
+LIBRARY ieee;
+USE ieee.std_logic_1164.all;
+use IEEE.NUMERIC_STD.ALL;
+
+ENTITY clk_display IS
+	PORT(clk: IN STD_LOGIC;
+		resetn: IN STD_LOGIC;
+		y: OUT UNSIGNED(2 DOWNTO 0);
+		z: OUT UNSIGNED(3 DOWNTO 0));
+END clk_display;
+
+
+ARCHITECTURE clk_display1 OF clk_display IS
+	SIGNAL ty:UNSIGNED(2 DOWNTO 0);
+	SIGNAL tz:UNSIGNED(3 DOWNTO 0);
+BEGIN
+	PROCESS(clk,resetn)
+		BEGIN
+			IF resetn='1' THEN tz<="0000"; ty<="000";
+			ELSIF clk'EVENT AND clk='1' THEN
+				CASE ty IS
+					WHEN "000"=> ty<="001";
+					WHEN "001"=> ty<="010";
+					WHEN "010"=> ty<="011";
+					WHEN "011"=> ty<="100";
+					WHEN OTHERS=> ty<="001";
+				END CASE;
+				CASE tz IS
+					WHEN "0000"=> tz<="1000";
+					WHEN "1000"=> tz<="0100";
+					WHEN "0100"=> tz<="0010";
+					WHEN "0010"=> tz<="0001";
+					WHEN OTHERS=> tz<="1000";
+				END CASE;
+			END IF;
+	END PROCESS;
+	y<=ty;
+	z<=tz;
+
+END clk_display1 ;
+
+
+------------------------------------------------------------------------
+LIBRARY ieee;
+USE ieee.std_logic_1164.all;
+use IEEE.NUMERIC_STD.ALL;
+
+
+
+ENTITY deci IS
+	PORT(blink,resetn,clk: IN STD_LOGIC;
+		display_no:UNSIGNED(2 DOWNTO 0);
+		dec: OUT STD_LOGIC);
+END deci;
+
+ARCHITECTURE decimal1 OF deci IS
+	SIGNAL t:STD_LOGIC;
+	SIGNAL count:UNSIGNED(8 DOWNTO 0);
+BEGIN
+	PROCESS(blink, display_no, resetn)
+		BEGIN
+		    IF resetn='1' THEN dec<='1';
+			ELSIF(blink='1' AND display_no="010") THEN dec<=NOT(t);
+			ELSE dec<='1';
+			END IF;
+	END PROCESS;
+	PROCESS(resetn,clk)
+		BEGIN
+			IF resetn='1' THEN t<='0';count<="000000000";
+			ELSIF clk'EVENT AND clk='1' THEN
+				IF count=124 THEN count<="000000000";t<=NOT(t);
+				ELSE count<=count+1;
+				END IF;
+			END IF;
+	END PROCESS;
+END decimal1;
+
+
+-----------------------------------------------------------------------
+LIBRARY ieee;
+USE ieee.std_logic_1164.all;
+use IEEE.NUMERIC_STD.ALL;
+
+ENTITY digital_clock IS
+	PORT(CLK: IN STD_LOGIC;
+		RESET: IN STD_LOGIC;
+		SET_TIME: IN STD_LOGIC;
+		PLUS:IN STD_LOGIC;
+		MODE:IN STD_LOGIC;
+		CHANGE_DIGIT:IN STD_LOGIC;
+		OUT_ANODE: OUT UNSIGNED(3 DOWNTO 0);
+		OUT_CATHODE: OUT UNSIGNED(6 DOWNTO 0);
+		OUT_DECIMAL: OUT STD_LOGIC);
+END digital_clock;
+
+ARCHITECTURE digi_clock OF digital_clock IS
+	SIGNAL clk250,user_set_time,to_deci: STD_LOGIC;
+	SIGNAL digit_selected,to_mux: UNSIGNED(2 DOWNTO 0);
+	SIGNAL th0,th1,tm0,tm1,ts0,ts1,th0_o,th1_o,tm0_o,tm1_o,ts0_o,ts1_o,x1_show,x0_show,y1_show,y0_show,to_seg_decoder: UNSIGNED(3 DOWNTO 0);
+
+	COMPONENT manual IS
+	PORT (Clk, Resetn, w : IN STD_LOGIC ;
+		z : OUT STD_LOGIC) ;
+	END COMPONENT ;
+
+	COMPONENT setting IS
+	PORT(Clk, Resetn, w, s: IN STD_LOGIC;
+		z: OUT UNSIGNED(2 DOWNTO 0));
+	END COMPONENT;
+
+	COMPONENT incrementer IS
+	PORT(Clk, Resetn, w: IN STD_LOGIC;
+		mode: IN UNSIGNED(2 DOWNTO 0);
+		h0,h1,m0,m1,s0,s1: OUT UNSIGNED(3 DOWNTO 0));
+	END COMPONENT;
+
+	COMPONENT clock IS
+	PORT (Clk, Resetn, set : IN STD_LOGIC ;
+		H0_in, H1_in, M0_in, M1_in, S0_in, S1_in : IN UNSIGNED(3 DOWNTO 0) ;
+		H0_out, H1_out, M0_out, M1_out, S0_out, S1_out : OUT UNSIGNED(3 DOWNTO 0)) ;
+	END COMPONENT;
+
+	COMPONENT mode IS
+	PORT (Clk, Resetn, w : IN STD_LOGIC ;
+		H0, H1, M0, M1, S0, S1 : IN UNSIGNED(3 DOWNTO 0) ;
+		x1,x0,y1,y0 : OUT UNSIGNED(3 DOWNTO 0);
+		blink: OUT STD_LOGIC) ;
+	END COMPONENT;
+
+	COMPONENT multiplexer IS
+	PORT(x1,x0,y1,y0: IN UNSIGNED(3 DOWNTO 0);
+		s: IN UNSIGNED(2 DOWNTO 0);
+		X: OUT UNSIGNED(3 DOWNTO 0));
+	END COMPONENT;
+
+	COMPONENT seg_decoder IS
+	PORT(x: IN UNSIGNED(3 DOWNTO 0);
+		y: OUT UNSIGNED(6 DOWNTO 0));
+	END COMPONENT;
+
+	COMPONENT clk_display IS
+	PORT(clk: IN STD_LOGIC;
+		resetn: IN STD_LOGIC;
+		y: OUT UNSIGNED(2 DOWNTO 0);
+		z: OUT UNSIGNED(3 DOWNTO 0));
+	END COMPONENT;
+
+	COMPONENT clk250Hz IS
+	PORT(clk:IN STD_LOGIC;
+		resetn:IN STD_LOGIC;
+		clk_out:OUT STD_LOGIC);
+	END COMPONENT;
+
+	COMPONENT deci IS
+	PORT(blink,resetn,clk: IN STD_LOGIC;
+		display_no:UNSIGNED(2 DOWNTO 0);
+		dec: OUT STD_LOGIC);
+	END COMPONENT;	
+
+
+BEGIN
+	master_clock: clk250Hz PORT MAP(clk=>CLK,resetn=>RESET,clk_out=>clk250);
+	manual_normal: manual PORT MAP(Clk=>clk250,Resetn=>RESET,w=>SET_TIME,z=>user_set_time);
+	select_digit: setting PORT MAP(Clk=>clk250,Resetn=>RESET,w=>CHANGE_DIGIT,s=>user_set_time,z=>digit_selected);
+	increament: incrementer PORT MAP(Clk=>clk250,Resetn=>RESET,w=>PLUS,mode=>digit_selected,h0=>th0,h1=>th1,m0=>tm0,m1=>tm1,s0=>ts0,s1=>ts1);
+	tik_tik: clock PORT MAP(Clk=>clk250,Resetn=>RESET,set=>user_set_time,H0_in=>th0,H1_in=>th1,M0_in=>tm0,M1_in=>tm1,S0_in=>ts0,S1_in=>ts1,H0_out=>th0_o,H1_out=>th1_o,M0_out=>tm0_o,M1_out=>tm1_o,S0_out=>ts0_o,S1_out=>ts1_o);
+	set_mode: mode PORT MAP(Clk=>clk250,Resetn=>RESET, w=>MODE, H0=>th0_o, H1=>th1_o, M0=>tm0_o, M1=>tm1_o, S0=>ts0_o, S1=>ts1_o,x1=>x1_show,x0=>x0_show,y1=>y1_show,y0=>y0_show, blink=>to_deci);
+	decimal_control: deci PORT MAP(blink=>to_deci,resetn=>RESET,clk=>clk250,display_no=>to_mux,dec=>OUT_DECIMAL);
+	display_manager: clk_display PORT MAP(clk=>clk250, resetn=>RESET, y=>to_mux,z=>OUT_ANODE);
+	multiplex : multiplexer PORT MAP(x1=>x1_show, x0=>x0_show, y1=>y1_show, y0=>y0_show, s=>to_mux, X=>to_seg_decoder);
+	seg_7_decoder: seg_decoder PORT MAP(x=>to_seg_decoder,y=>OUT_CATHODE);
+END digi_clock;
+
+
+

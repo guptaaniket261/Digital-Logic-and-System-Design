@@ -1,0 +1,349 @@
+library IEEE;
+use IEEE.std_logic_1164.ALL;
+use IEEE.NUMERIC_STD.ALL;
+
+entity part_d is
+	port (
+	clock,filter_type, push, resetn: in std_logic;
+	data_from_mac: in std_logic_vector(17 downto 0);
+	data_from_ram: in std_logic_vector(7 downto 0);
+	data_from_rom: in std_logic_vector(8 downto 0);
+	data1_to_mac, data2_to_mac: out std_logic_vector(17 downto 0);
+	data_to_ram: out std_logic_vector(7 downto 0);
+	read_s_ram, read_s_rom, write_s_ram, control_mac: out std_logic;
+	address_ram: out std_logic_vector(15 downto 0);
+	address_rom: out std_logic_vector(4 downto 0);
+	D_one,B_usy,S_tart: out std_logic
+	);
+end part_d;
+
+
+architecture part_d1 of part_d is
+	type state_type is (S00, S0, S1, S2, S3, S4, S5, S6, S7, S8, S9, S10, S11, S_wait);
+	signal state: state_type;
+	signal start, busy, done: std_logic;
+	signal x: std_logic;
+	signal ts: unsigned(4 downto 0);
+	signal address_to_write: std_logic_vector(15 downto 0);
+	signal ro, co : unsigned(15 downto 0);  ---can be done in 8 bit only but since we use it later to find the addresses(16 bit) so to make calculations easier, I chose 16 bit for this too
+begin
+
+	D_one<=done;
+	S_tart<=start;
+	B_usy<=busy;
+	process(push) begin
+		if rising_edge(push) then
+			if (done='1') then start<='0'; done<='0'; busy<='0';
+			elsif (busy='0') then 
+				busy<='1'; 
+				start<='1';
+				read_s_rom<='1';
+				if (filter_type='1') then ts<="10000";
+				else ts<="00000";
+				end if;
+
+			end if;
+		end if;
+	end process;
+-- can set data1 data2 control_mac to 0 in state s11,s0,s1 can consider
+	process(clock) begin
+		if rising_edge(clock) then
+			if (resetn='1') then
+				data1_to_mac<="000000000000000000";
+				data2_to_mac<="000000000000000000";
+				data_to_ram<="00000000";
+				address_ram<="0000000000000000";
+				address_rom<="00000";
+				read_s_ram<='0';
+				read_s_rom<='0';
+				write_s_ram<='0';
+				control_mac<='0';
+				state<=S00;
+				start<='0';
+				busy<='0';
+				done<='0';
+				x<='0';
+				ro<="0000000000000000";
+				co<="0000000000000000";
+			elsif(state=S00) then
+				if (start='1') then state<=S0;
+				end if;
+			elsif (state=S0) then
+				if (x='0') then
+					x<='1';
+					co<="0000000000000000";
+					ro<="0000000000000000";
+					state<=S1;
+					address_to_write<="1000000000000000";
+				elsif(co=157) then
+					if (ro=117) then
+						done<='1';
+						busy<='0';
+						state<=S_wait;
+						read_s_rom<='0';
+					else 
+						ro<=ro+1;
+						co<="0000000000000000";
+						state<=S1;
+						address_to_write<=std_logic_vector(unsigned(address_to_write)+1);
+					end if;
+				else
+					co<=co+1;
+					state<=S1;
+					address_to_write<=std_logic_vector(unsigned(address_to_write)+1);
+				end if;
+			elsif (state=S_wait) then
+				if (start='0') then state<=S00; x<='0';
+				end if;
+			else
+				case state is
+					when S1=> state<=S2;
+					when S2=> state<=S3;
+					when S3=> state<=S4;
+					when S4=> state<=S5;
+					when S5=> state<=S6;
+					when S6=> state<=S7;
+					when S7=> state<=S8;
+					when S8=> state<=S9;
+					when S9=> state<=S10;
+					when S10=> state<=S11;
+					when S11=> state<=S0;
+					when OTHERS => state<=S00;   --this is not possible
+				end case;
+			end if;
+		end if;
+	end process;
+
+
+	process(state) begin
+		if state=S11 then
+			if data_from_mac(17)='1' then
+				data_to_ram<="00000000";
+			else
+				data_to_ram<=data_from_mac(14 downto 7);
+			end if;
+		else
+			data_to_ram<="00000000";
+		end if;
+	end process;
+
+	data1_to_mac<="0000000000"&data_from_ram;
+	data2_to_mac<="000000000"&data_from_rom;
+
+
+	with state select
+		 address_ram<=std_logic_vector(unsigned(ro)*160+unsigned(co)) when S1,
+		 			std_logic_vector(unsigned(ro)*160+unsigned(co)+1) when S2,
+		 			std_logic_vector(unsigned(ro)*160+unsigned(co)+2) when S3,
+		 			std_logic_vector(unsigned(ro)*160+unsigned(co)+160) when S4,
+		 			std_logic_vector(unsigned(ro)*160+unsigned(co)+161) when S5,
+		 			std_logic_vector(unsigned(ro)*160+unsigned(co)+162) when S6,
+		 			std_logic_vector(unsigned(ro)*160+unsigned(co)+320) when S7,
+		 			std_logic_vector(unsigned(ro)*160+unsigned(co)+321) when S8,
+		 			std_logic_vector(unsigned(ro)*160+unsigned(co)+322) when S9,
+		 			address_to_write when S11,
+		 			"0000000000000000" when OTHERS;
+
+
+	with state select
+		control_mac<='0' WHEN s1,
+					'0' when S2,
+					'1' when OTHERS;
+
+	with state select
+		read_s_ram<='0' when S11,
+					'1' when OTHERS;
+
+	with state select
+		write_s_ram<='1' when S11,
+					'0' when OTHERS;
+
+	with state select
+		address_rom<=std_logic_vector(ts) when S1,
+					std_logic_vector(ts+1) when S2,
+					std_logic_vector(ts+2) when S3,
+					std_logic_vector(ts+3) when S4,
+					std_logic_vector(ts+4) when S5,
+					std_logic_vector(ts+5) when S6,
+					std_logic_vector(ts+6) when S7,
+					std_logic_vector(ts+7) when S8,
+					std_logic_vector(ts+8) when S9,
+					"00000" when OTHERS;
+
+	
+
+end part_d1;
+
+--------------------------------------------------------------------------------------------------------------------------------------------------------------
+library IEEE;
+use IEEE.std_logic_1164.ALL;
+use IEEE.NUMERIC_STD.ALL;
+
+
+entity RAM_64Kx8 is
+ port (
+ clock : in std_logic;
+ read_enable, write_enable : in std_logic; -- signals that enable read/write operation
+ address : in std_logic_vector(15 downto 0); -- 2^16 = 64K
+ data_in : in std_logic_vector(7 downto 0);
+ data_out : out std_logic_vector(7 downto 0)
+ );
+end RAM_64Kx8;
+
+
+
+architecture Artix of RAM_64Kx8 is
+ type Memory_type is array (0 to 65535) of std_logic_vector (7 downto 0);
+ signal Memory_array : Memory_type;
+begin
+ process (clock) begin
+ if rising_edge (clock) then
+ if (read_enable = '1') then -- the data read is available after the clock edge
+ data_out <= Memory_array (to_integer (unsigned (address)));
+ end if;
+ if (write_enable = '1') then -- the data is written on the clock edge
+ Memory_array (to_integer (unsigned(address))) <= data_in;
+ end if;
+ end if;
+ end process;
+end Artix;
+
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------
+library IEEE;
+use IEEE.std_logic_1164.ALL;
+use IEEE.NUMERIC_STD.ALL;
+
+
+entity ROM_32x9 is
+ port (
+ clock : in std_logic;
+ read_enable : in std_logic; -- signal that enables read operation
+ address : in std_logic_vector(4 downto 0); -- 2^5 = 32
+ data_out : out std_logic_vector(8 downto 0)
+ );
+end ROM_32x9;
+
+
+architecture Artix of ROM_32x9 is
+ type Memory_type is array (0 to 31) of std_logic_vector (8 downto 0);
+ signal Memory_array : Memory_type;
+begin
+ process (clock) begin
+ if rising_edge (clock) then
+ if (read_enable = '1') then -- the data read is available after the clock edge
+ data_out <= Memory_array (to_integer (unsigned (address)));
+ end if;
+ end if;
+ end process;
+end Artix;
+
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------
+library IEEE;
+use IEEE.std_logic_1164.ALL;
+use IEEE.NUMERIC_STD.ALL;
+
+entity MAC is
+ port (
+ clock : in std_logic;
+ control : in std_logic; -- ‘0’ for initializing the sum
+ data_in1, data_in2 : in std_logic_vector(17 downto 0);
+ data_out : out std_logic_vector(17 downto 0)
+ );
+end MAC;
+
+
+
+architecture Artix of MAC is
+ signal sum, product : signed (17 downto 0);
+begin
+ data_out <= std_logic_vector (sum);
+ product <= signed (data_in1) * signed (data_in2);
+ process (clock) begin
+ if rising_edge (clock) then -- sum is available after clock edge
+ if (control = '0') then -- initialize the sum with the first product
+ sum <= product;
+ else -- add product to the previous sum
+ sum <= product + signed (sum);
+ end if;
+ end if;
+ end process;
+end Artix;
+
+--------------------------------------------------------------------------------------------------------------------------------------------------------------
+library IEEE;
+use IEEE.std_logic_1164.ALL;
+use IEEE.NUMERIC_STD.ALL;
+
+
+entity Image_filter is
+	port(PUSH, RESET, CLOCK, FILTER_TYPE: in std_logic;
+		DONE, BUSY, START: out std_logic
+	);
+end Image_filter;
+
+architecture filter_image of Image_filter is
+
+	signal data_f_mac: std_logic_vector(17 downto 0);
+	signal data_f_ram: std_logic_vector(7 downto 0);
+	signal data_f_rom: std_logic_vector(8 downto 0);
+	signal data1_t_mac, data2_t_mac: std_logic_vector(17 downto 0);
+	signal data_t_ram: std_logic_vector(7 downto 0);
+	signal read_ram, read_rom, write_ram, mac_control: std_logic;
+	signal ram_address: std_logic_vector(15 downto 0);
+	signal rom_address: std_logic_vector(4 downto 0);
+
+
+	component part_d is
+	port (
+	clock,filter_type, push, resetn: in std_logic;
+	data_from_mac: in std_logic_vector(17 downto 0);
+	data_from_ram: in std_logic_vector(7 downto 0);
+	data_from_rom: in std_logic_vector(8 downto 0);
+	data1_to_mac, data2_to_mac: out std_logic_vector(17 downto 0);
+	data_to_ram: out std_logic_vector(7 downto 0);
+	read_s_ram, read_s_rom, write_s_ram, control_mac: out std_logic;
+	address_ram: out std_logic_vector(15 downto 0);
+	address_rom: out std_logic_vector(4 downto 0);
+	D_one,B_usy,S_tart: out std_logic
+	);
+	end component;
+
+	component RAM_64Kx8 is
+	 port (
+	 clock : in std_logic;
+	 read_enable, write_enable : in std_logic; 
+	 address : in std_logic_vector(15 downto 0); 
+	 data_in : in std_logic_vector(7 downto 0);
+	 data_out : out std_logic_vector(7 downto 0)
+	 );
+	end component;
+
+
+	component ROM_32x9 is
+	 port (
+	 clock : in std_logic;
+	 read_enable : in std_logic; -- signal that enables read operation
+	 address : in std_logic_vector(4 downto 0); -- 2^5 = 32
+	 data_out : out std_logic_vector(8 downto 0)
+	 );
+	end component;
+
+
+	component MAC is
+	 port (
+	 clock : in std_logic;
+	 control : in std_logic; -- ‘0’ for initializing the sum
+	 data_in1, data_in2 : in std_logic_vector(17 downto 0);
+	 data_out : out std_logic_vector(17 downto 0)
+	 );
+	end component;
+	
+
+begin
+	d_part: part_d port map(clock=>CLOCK, filter_type=>FILTER_TYPE, push=>PUSH,resetn=>RESET, data_from_mac=>data_f_mac, data_from_ram=>data_f_ram, data_from_rom=>data_f_rom, data1_to_mac=>data1_t_mac, data2_to_mac=>data2_t_mac, data_to_ram=>data_t_ram, read_s_ram=>read_ram, read_s_rom=>read_rom, write_s_ram=>write_ram, control_mac=>mac_control, address_ram=>ram_address, address_rom=>rom_address, D_one=>DONE, B_usy=>BUSY, S_tart=>START);
+	ram: RAM_64Kx8 port map(clock=>CLOCK, read_enable=>read_ram, write_enable=>write_ram, address=>ram_address, data_in=>data_t_ram, data_out=>data_f_ram);
+	rom: ROM_32x9 port map(clock=>CLOCK, read_enable=>read_rom, address=>rom_address, data_out=>data_f_rom);
+	mac: MAC port map(clock=>CLOCK, control=>mac_control, data_in1=>data1_t_mac, data_in2=>data2_t_mac, data_out=>data_f_mac);
+
+end filter_image;
+
